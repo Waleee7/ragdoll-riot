@@ -1,0 +1,7 @@
+docs
+scripts
+README.md
+package.json
+.shots
+node_modules
+.gitignore

@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>RAGDOLL RIOT | A stickman brawler by Joshua Dare</title>
+<meta name="description" content="Punch, kick and launch waves of stickmen across the arena. Chain hits, chase the combo.">
+<meta name="theme-color" content="#090A0F">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="RAGDOLL RIOT">
+<meta property="og:title" content="RAGDOLL RIOT | A stickman brawler by Joshua Dare">
+<meta property="og:description" content="Punch, kick and launch waves of stickmen across the arena. Chain hits, chase the combo.">
+<meta property="og:url" content="https://ragdoll-riot.vercel.app/">
+<link rel="canonical" href="https://ragdoll-riot.vercel.app/">
+<meta property="og:image" content="https://ragdoll-riot.vercel.app/og.jpg">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://ragdoll-riot.vercel.app/og.jpg">
+<meta name="twitter:title" content="RAGDOLL RIOT | A stickman brawler by Joshua Dare">
+<meta name="twitter:description" content="Punch, kick and launch waves of stickmen across the arena. Chain hits, chase the combo.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23090A0F'/%3E%3Cg stroke='%23fff' stroke-width='3' stroke-linecap='round' fill='none'%3E%3Cpath d='M13 12v8l-4 7M13 20l5 7M13 14l9-2'/%3E%3C/g%3E%3Ccircle cx='13' cy='8' r='3.4' fill='%23fff'/%3E%3Ccircle cx='24' cy='11.5' r='2.4' fill='%23FF3E3E'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="style.css">
+</head>
+<body data-state="title">
+
+<canvas id="bg" aria-hidden="true"></canvas>
+<canvas id="c" role="img" aria-label="RAGDOLL RIOT game canvas"></canvas>
+
+<!-- top bar: byline + mute -->
+<header class="bar">
+  <span class="daytag">BY JOSHUA DARE</span>
+  <div class="bar-r">
+  <button id="pausebtn" class="icon-btn" type="button" aria-label="Pause">
+    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M7 5h3.2v14H7zM13.8 5H17v14h-3.2z" fill="currentColor"/></svg>
+  </button>
+  <button id="mute" class="icon-btn" type="button" aria-pressed="false" aria-label="Mute sound">
+    <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+      <path class="spk" d="M4 9v6h4l5 4V5L8 9z" fill="currentColor"/>
+      <path class="wave" d="M16 8.5a5 5 0 010 7M18.6 6a8.6 8.6 0 010 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      <path class="slash" d="M17 9l5 6M22 9l-5 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+    </svg>
+  </button>
+  </div>
+</header>
+
+<!-- in-run HUD (the game adds its own widgets inside #hud) -->
+<div id="hud" aria-hidden="true">
+  <div class="hud-score"><span id="hud-score">0</span><small>BEST <b id="hud-best">0</b></small></div>
+  <div class="rr-hp" id="rr-hp"><span>HP</span><div class="rr-track"><i id="rr-hp-fill"></i></div><b id="rr-hp-n">100</b></div>
+  <div class="rr-riot" id="rr-riot"><span>RIOT</span><div class="rr-track"><i id="rr-riot-fill"></i></div><b>L</b></div>
+  <div class="rr-wave" id="rr-wave">WAVE <b>1</b></div>
+  <div class="rr-combo" id="rr-combo"><b id="rr-mult">x1</b><span id="rr-hits">0 HITS</span><div class="rr-ctrack"><i id="rr-cbar"></i></div></div>
+  <div class="rr-boss" id="rr-boss"><p>THE BOUNCER <span>BOSS</span></p><div class="rr-track"><i id="rr-boss-fill"></i></div></div>
+  <div id="tip" class="tip"></div>
+  <div id="legend" class="legend">
+    <span><kbd>A</kbd><kbd>D</kbd>MOVE</span><span><kbd>W</kbd>JUMP</span><span><kbd>J</kbd>PUNCH</span><span><kbd>K</kbd>KICK</span><span><kbd>L</kbd>SUPER</span><span><kbd>P</kbd>PAUSE</span><span><kbd>H</kbd>HIDE KEYS</span>
+  </div>
+</div>
+
+<div id="banner" aria-hidden="true"></div>
+
+<!-- touch controls: shown only on touch devices, only during a run -->
+<div id="touch" aria-hidden="true">
+  <div data-stick-zone class="stick-zone">
+    <div data-stick class="stick"><div data-knob class="knob"></div></div>
+  </div>
+  <button type="button" class="tbtn tbtn-a" data-action="punch">PUNCH</button>
+  <button type="button" class="tbtn tbtn-b" data-action="kick">KICK</button>
+  <button type="button" class="tbtn tbtn-c" data-action="super">SUPER</button>
+</div>
+
+<section id="title" class="screen">
+  <div class="panel">
+    <p class="eyebrow">STICKMAN BRAWLER <i>/</i> FREE <i>/</i> NO INSTALL</p>
+    <h1 class="logo"><span>RAGDOLL</span><span class="out">RIOT</span></h1>
+    <p class="pitch">Punch, kick and launch waves of stickmen across the arena. Chain hits, chase the combo.</p>
+    <p class="new"><b>NEW</b>BOSS WAVES <i>/</i> SHIELDS <i>/</i> RUNNERS <i>/</i> LIVE ROPES <i>/</i> RIOT SUPER</p>
+    <dl class="keys">
+      <div class="desk"><dt>MOVE</dt><dd>A D / ARROWS</dd></div>
+      <div class="desk"><dt>JUMP</dt><dd>W / SPACE</dd></div>
+      <div class="desk"><dt>PUNCH</dt><dd>J / L-CLICK</dd></div>
+      <div class="desk"><dt>KICK</dt><dd>K / R-CLICK</dd></div>
+      <div class="desk"><dt>SUPER</dt><dd>L, WHEN FULL</dd></div>
+      <div class="desk"><dt>PAUSE</dt><dd>P / ESC</dd></div>
+      <div class="desk"><dt>HELP</dt><dd>H</dd></div>
+      <div class="desk"><dt>MUTE</dt><dd>M</dd></div>
+      <div class="tch"><dt>MOVE</dt><dd>LEFT STICK</dd></div>
+      <div class="tch"><dt>JUMP</dt><dd>FLICK STICK UP</dd></div>
+      <div class="tch"><dt>PUNCH</dt><dd>BIG BUTTON</dd></div>
+      <div class="tch"><dt>KICK</dt><dd>SMALL BUTTON</dd></div>
+      <div class="tch"><dt>SUPER</dt><dd>SUPER BUTTON</dd></div>
+      <div class="tch"><dt>PAUSE</dt><dd>II, TOP RIGHT</dd></div>
+    </dl>
+    <div class="row">
+      <button id="play" class="btn primary" type="button">PLAY <kbd>ANY KEY</kbd></button>
+      <button id="howbtn" class="btn ghost" type="button">HOW TO PLAY <kbd>H</kbd></button>
+      <button class="btn ghost" type="button" data-share>COPY LINK</button>
+    </div>
+    <p class="best">BEST <b id="best-title">0</b></p>
+  </div>
+</section>
+
+<section id="over" class="screen" hidden>
+  <div class="panel">
+    <p class="eyebrow">RUN OVER <i id="over-tag-sep">/</i> <span id="over-tag" class="tag" hidden>NEW BEST</span></p>
+    <h2 id="over-heading" class="logo sm">GAME OVER</h2>
+    <p class="big-score"><span id="over-score">0</span></p>
+    <p class="best">BEST <b id="over-best">0</b></p>
+    <dl id="over-lines" class="keys stats"></dl>
+    <div class="row">
+      <button id="again" class="btn primary" type="button">AGAIN <kbd>R / SPACE</kbd></button>
+      <button class="btn ghost" type="button" data-share>COPY LINK</button>
+    </div>
+  </div>
+</section>
+
+<section id="paused" class="screen center" hidden>
+  <div class="panel">
+    <h2 class="logo sm">PAUSED</h2>
+    <div data-keys-slot></div>
+    <div class="row center">
+      <button id="resume" class="btn primary" type="button">RESUME <kbd>ANY KEY</kbd></button>
+      <button id="restart" class="btn ghost" type="button">RESTART <kbd>R</kbd></button>
+      <button id="pause-how" class="btn ghost" type="button">HOW TO PLAY <kbd>H</kbd></button>
+    </div>
+  </div>
+</section>
+
+<section id="howto" class="screen howto" hidden aria-labelledby="howto-h">
+  <div class="panel wide">
+    <p class="eyebrow">HOW TO PLAY</p>
+    <h2 id="howto-h" class="logo sm">SURVIVE THE RIOT</h2>
+    <p class="pitch">Waves of stickmen keep coming. Clear a wave to heal 16 HP and bank a bonus. Every fifth wave, the boss walks in.</p>
+    <div class="how-grid">
+      <div>
+        <h3>MOVES</h3>
+        <dl class="how">
+          <div><dt>THREE-HIT COMBO</dt><dd>Punch three times fast. The third punch is an uppercut that launches.</dd></div>
+          <div><dt>KICK</dt><dd>Sends them flying. A flying body knocks down anyone it hits: that's a STRIKE.</dd></div>
+          <div><dt>JUGGLE</dt><dd>Hit enemies while they're in the air for bonus points.</dd></div>
+          <div><dt>RIOT SUPER</dt><dd>Every hit fills the RIOT meter. When it's full, unleash it to blast the whole ring off its feet.</dd></div>
+          <div><dt>MULTIPLIER</dt><dd>Every 4 hits in a row raises it, up to x10. Getting hit resets it.</dd></div>
+        </dl>
+      </div>
+      <div>
+        <h3>ENEMIES</h3>
+        <dl class="how">
+          <div><dt>GRUNT</dt><dd>The basic brawler. A ! over its head means a swing is coming.</dd></div>
+          <div><dt>RUNNER</dt><dd>From wave 2. Fast and fragile. Jabs, then backs off.</dd></div>
+          <div><dt>BRUTE</dt><dd>From wave 3. Huge and slow. When you see the !, back off or jump.</dd></div>
+          <div><dt>SHIELD</dt><dd>From wave 4. Blocks punches from the front. Kick to break the guard, or hit it from behind.</dd></div>
+          <div><dt>THE BOUNCER</dt><dd>Every fifth wave. Too heavy to launch, and it pounds the floor. Jump the shockwaves.</dd></div>
+        </dl>
+        <h3>THE RING</h3>
+        <dl class="how">
+          <div><dt>LIVE ROPES</dt><dd>Launch enemies into the electric ropes on either side for a ZAP bonus. Get knocked into them yourself and you get zapped too.</dd></div>
+        </dl>
+      </div>
+    </div>
+    <h3>CONTROLS</h3>
+    <div data-keys-slot></div>
+    <div class="row">
+      <button id="how-play" class="btn primary" type="button">PLAY <kbd>ENTER</kbd></button>
+      <button id="how-back" class="btn ghost" type="button">BACK <kbd>ESC</kbd></button>
+    </div>
+  </div>
+</section>
+
+<div id="toast" role="status" aria-live="polite"></div>
+<div id="sr-live" class="sr" role="status" aria-live="polite"></div>
+
+<noscript><p class="noscript">RAGDOLL RIOT needs JavaScript. Punch, kick and launch waves of stickmen across the arena. Chain hits, chase the combo.</p></noscript>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

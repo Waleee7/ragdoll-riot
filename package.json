@@ -1,0 +1,13 @@
+{
+  "name": "ragdoll-riot",
+  "private": true,
+  "type": "module",
+  "description": "A stickman ragdoll brawler for the browser. Plain HTML, CSS and JavaScript: zero runtime dependencies.",
+  "scripts": {
+    "start": "python3 -m http.server 5173",
+    "test": "node scripts/verify.mjs && node scripts/features.mjs"
+  },
+  "devDependencies": {
+    "playwright": "1.62.1"
+  }
+}
