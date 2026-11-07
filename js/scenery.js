@@ -20,7 +20,7 @@ const BASE = {
 export const PAL = {
   ring: { ...BASE },
   pit: { ...BASE, bossMain: '#e8742a', bossBack: '#8a3a14', plate: '#5b2a12', deco: 'helm' },
-  margins: {
+  margins: { pGiant: '#c96f00', pGiantB: '#8f4e00',
     ...BASE, paper: true, acc: '#d1202b', w: '#1b1c24', soft: '#2a2b35', mid: '#4a4c58', grey: '#55525a', pink: '#c4636b', dust: '#6d6a62',
     stroke: 'rgba(244,239,227,.92)', flash: '#1b1c24', num: 'rgba(30,30,40,.08)', shadow: '#2a2a33', shadowA: 0.3,
     pMain: '#17181f', pBack: '#5a5c68', eMain: '#d1202b', eBack: '#8a1220', bossMain: '#b3121f', bossBack: '#6b0a14', plate: '#4b0910', tail: '#7a1a22',

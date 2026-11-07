@@ -45,6 +45,8 @@ The last enemy of a wave sent into a wall earns an extended slow-mo, the locatio
 |---|---|
 | **Three-hit combo** | Punch three times fast. The third punch is an uppercut that launches. |
 | **Kick** | Sends them flying. A flying body knocks down anyone it hits: that's a **STRIKE**. |
+| **Slide** | `S` / `Down`, or flick the stick down. Slides under melee swings and trips whoever it reaches. Jump out of it to keep your speed. |
+| **GIANT** | A gold orb drops every 9 knockouts. Grab it for 10 seconds at 1.6x size: double damage, half damage taken, and every jump lands as a shockwave. |
 | **Juggle** | Hit enemies while they're airborne for bonus points. |
 | **Live walls** | Launch enemies into the walls (ropes, spikes or erasers, depending on the location) for a bonus. Get knocked in yourself and it hurts too. |
 | **RIOT super** | Every hit fills the RIOT meter. Full meter: press `L` and blast the whole ring off its feet. |

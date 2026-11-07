@@ -165,6 +165,14 @@ export class Sfx {
     this.noise({ dur: 0.5, type: 'highpass', f: 800, f2: 5200, q: 0.7, vol: 0.34, attack: 0.04 });
     this.tone({ f: 50, f2: 24, dur: 0.6, vol: 0.55, delay: 0.25 });
   }
+  _slide() { this.noise({ dur: 0.34, type: 'bandpass', f: 1500, f2: 420, q: 0.8, vol: 0.2 }); }
+  _orb() { [0, 0.09].forEach((d, i) => this.tone({ f: 620 + i * 300, f2: 760 + i * 300, dur: 0.1, type: 'triangle', vol: 0.12, delay: d })); }
+  _grow() {
+    this.tone({ f: 90, f2: 520, dur: 0.5, type: 'sawtooth', vol: 0.2 });
+    this.tone({ f: 180, f2: 1040, dur: 0.5, type: 'square', vol: 0.07, delay: 0.05 });
+    this.tone({ f: 60, f2: 30, dur: 0.5, vol: 0.5, delay: 0.3 });
+  }
+  _shrink() { this.tone({ f: 620, f2: 110, dur: 0.42, type: 'sawtooth', vol: 0.14 }); }
   _tip() { this.tone({ f: 880, f2: 1320, dur: 0.06, vol: 0.05 }); }
   _over() {
     [0, -3, -7, -12].forEach((n, i) =>

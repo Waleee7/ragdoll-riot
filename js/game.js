@@ -19,6 +19,7 @@ import { PAL, HZ, drawAmbient, drawHazard, drawWallFx } from './scenery.js';
 const BG = '#090a0f';
 const DISPLAY = '"Futura Condensed ExtraBold","Impact","Haettenschweiler","Arial Narrow Bold",sans-serif';
 const REACH = { grunt: 68, runner: 60, shield: 76, brute: 96 };
+const GIANT = { dur: 10, scale: 1.6, every: 9, orbLife: 9 };   // the GIANT power-up: size, seconds, knockouts between orbs
 const TIPS_KEY = 'ragdoll-riot:tips';
 const TIP_RUNS = 3;                     // a tip shows on the first few runs that reach it
 const BREAK_EVERY = 3;                  // THE RIOT SPREADS: a new location every 3 waves
@@ -244,6 +245,7 @@ g.reset = (mode) => {
   W.wave = 0; W.hudNext = false; W.phase = mode === 'play' ? 'banner' : 'attract'; W.phaseT = 0; W.queue = []; W.spawnT = 0; W.spawnGap = 1;
   W.maxAlive = 4; W.tokens = 1; W.spd = 1; W.enrage = 0;
   W.riot = 0; W.superFired = true; W.supers = 0; W.zaps = 0; W.bosses = 0; W.boss = null; W.auto = false; W.god = false;
+  W.orb = null; W.nextOrb = GIANT.every; W.giantT = 0; W.gv = 0; W.slideCd = 0; W.giants = 0;
   W.waves = []; W.ropeFx = []; W.wallFx = []; W.hz = null; W.hzT = 3.5; W.hzHits = 0;
   W.crossed = 0; W.breakDue = false; W.breaking = false; W.lastDir = 1; W.crowd = 0; W.hard = 0; W.wallFinishers = 0;
   W.tipQ = []; W.tipT = 0; W.tipStage = null; W.carry = false; W.tipsShown = new Set(); W.kicked = false; W.legendDim = false;
@@ -304,6 +306,7 @@ function startWave(n) {
   shell.sfx.play(bossWave ? 'boss' : 'wave');
   if (n === 1) {
     tip('combo', 'TAP J THREE TIMES FAST. THE THIRD PUNCH IS AN UPPERCUT.', 'TAP PUNCH THREE TIMES FAST. THE THIRD HIT IS AN UPPERCUT.', 1.3);
+    tip('slide', 'PRESS S WHILE MOVING TO SLIDE UNDER SWINGS AND TRIP ENEMIES.', 'FLICK THE STICK DOWN TO SLIDE UNDER SWINGS AND TRIP ENEMIES.', 18);
     tip('kick', 'KICK (K) SENDS THEM FLYING INTO EACH OTHER.', 'KICK SENDS THEM FLYING INTO EACH OTHER.', 9, () => !W.kicked);
   }
   if (n >= 2) stageTips();
@@ -431,6 +434,7 @@ g.update = (dt, sh) => {
   }
   stepWaves();
   stepHazard(playing);
+  stepPower(playing);
   for (let i = W.ropeFx.length - 1; i >= 0; i--) if ((W.ropeFx[i].t -= DT) <= 0) W.ropeFx.splice(i, 1);
   for (let i = W.wallFx.length - 1; i >= 0; i--) if ((W.wallFx[i].t -= DT) <= 0) W.wallFx.splice(i, 1);
   if (W.crowd > 0) W.crowd = Math.max(0, W.crowd - DT * 1.3);
@@ -459,7 +463,7 @@ function humanIntent() {
   const pk = inp.pressed('punch'), kk = inp.pressed('kick');
   return {
     ax: inp.axis(),
-    jump: inp.pressed('up'),
+    jump: inp.pressed('up'), slide: inp.pressed('down'),
     punch: pk, kick: kk,
     sup: inp.pressed('super'),
     mouse: (pk && inp.source('punch') === 'mouse') || (kk && inp.source('kick') === 'mouse'),
@@ -510,7 +514,7 @@ function playerControl(p, it) {
 
   // movement
   if (p.state === 'idle') {
-    const target = it.ax * p.k.speed * (p.onGround ? 1 : 0.92);
+    const target = it.ax * p.k.speed * p.speedMul * (p.onGround ? 1 : 0.92);
     p.vx += (target - p.vx) * (p.onGround ? 0.32 : 0.1);
     if (it.ax !== 0) p.face = sign(it.ax);
   }
@@ -520,6 +524,16 @@ function playerControl(p, it) {
     if (p.state === 'atk') { p.state = 'idle'; p.atk = null; }
     sh.sfx.play('jump');
     sh.particles.dust(p.x, V.ground, 5, 20);
+  }
+  // slide: feet first under the swings, tripping whoever it reaches (a jump cancels it)
+  buf.slide = it.slide ? 0.2 : (buf.slide || 0) - DT;
+  if (buf.slide > 0 && p.onGround && W.slideCd <= 0
+    && (p.state === 'idle' || (p.state === 'atk' && p.atk.a > 0 && p.atkName !== 'roar' && p.t >= p.atk.dur * (p.atk.b + 0.03)))) {
+    if (it.ax !== 0) p.face = sign(it.ax);
+    p.startAttack('slide'); p.vx = p.face * 680 * p.speedMul;
+    W.slideCd = 0.75; buf.slide = 0; buf.atk = '';
+    sh.sfx.play('slide');
+    sh.particles.dust(p.x, V.ground, 6, 26);
   }
   // attacks (buffered, chain-cancelable once the active window is over)
   if (buf.t > 0 && buf.atk) {
@@ -726,10 +740,121 @@ function directorStep(playing) {
 function addScore(n) { W.score += n; shell.setScore(W.score); }
 
 /* ---------- landing / wall events ---------- */
+/* ---------- the GIANT power-up: a gold orb drops every few knockouts ---------- */
+function stepPower(playing) {
+  const p = W.player, { particles, sfx, juice } = shell;
+  if (W.slideCd > 0) W.slideCd -= DT;
+  if (p.state === 'atk' && p.atkName === 'slide' && p.onGround && Math.floor(W.t * 60) % 3 === 0) particles.dust(p.x + p.face * 26 * p.s, V.ground, 1, 14);
+
+  if (playing && W.mode === 'play' && !W.orb && W.giantT <= 0 && W.kills >= W.nextOrb && W.phase === 'fight' && p.alive) spawnOrb();
+  const o = W.orb;
+  if (o) {
+    o.t += DT; o.vy += 1500 * DT; o.y += o.vy * DT;
+    const rest = V.ground - 42;
+    if (o.y > rest) { o.y = rest; if (o.vy > 120) { particles.dust(o.x, V.ground, 3, 16); o.vy *= -0.45; } else { o.vy = 0; o.landed = true; } }
+    if (o.landed) o.life -= DT;
+    if (o.life <= 0) { W.orb = null; W.nextOrb = W.kills + GIANT.every; }
+    else if (p.alive && !p.ragdolled && p.state !== 'getup' && Math.abs(p.x - o.x) < 42 * p.s && p.y - o.y < 150) goGiant(p, o);
+  }
+
+  // size follows a spring, so growing overshoots and settles; the last 2 s pulse as a warning
+  if (W.giantT > 0 && p.alive) {
+    W.giantT -= DT;
+    if (W.giantT <= 0) {
+      W.giantT = 0; p.giant = false; p.giantGlow = false; p.speedMul = 1;
+      sfx.play('shrink'); particles.ring(p.x, V.ground - 60, 90, C.acc, 0.3);
+    }
+  }
+  const warn = W.giantT > 0 && W.giantT < 2;
+  const blink = warn && Math.floor(W.giantT * 6) % 2 === 0;
+  if (p.giant) p.giantGlow = !blink;
+  const want = W.giantT > 0 ? (blink ? GIANT.scale - 0.14 : GIANT.scale) : 1;
+  if (Math.abs(want - p.s) > 0.002 || Math.abs(W.gv) > 0.01) {
+    W.gv = (W.gv + (want - p.s) * 200 * DT) * 0.86;
+    p.setScale(clamp(p.s + W.gv * DT * 6, 0.9, 1.85));
+  } else if (p.s !== want) { p.setScale(want); W.gv = 0; }
+  if (p.giant && p.onGround && Math.abs(p.vx) > 60 && Math.floor(W.t * 60) % 14 === 0) { particles.dust(p.x, V.ground, 2, 22); juice.shake(1.2); }
+}
+
+function spawnOrb() {
+  const p = W.player, lo = 90, hi = V.arenaW - 90;
+  let x = rand(lo, hi);
+  if (Math.abs(x - p.x) < 200) x = p.x < V.arenaW / 2 ? Math.min(hi, p.x + rand(200, 340)) : Math.max(lo, p.x - rand(200, 340));
+  W.orb = { x, y: -40, vy: 0, t: 0, life: GIANT.orbLife, landed: false };
+  shell.sfx.play('orb');
+  tip('giant', 'GRAB THE GOLD ORB TO GO GIANT: DOUBLE DAMAGE, AND A JUMP LANDS AS A SHOCKWAVE.', 'GRAB THE GOLD ORB TO GO GIANT: DOUBLE DAMAGE, AND A JUMP LANDS AS A SHOCKWAVE.', 0);
+}
+
+function goGiant(p, o) {
+  const { particles, sfx, juice } = shell;
+  W.orb = null; W.giants++;
+  W.giantT = GIANT.dur; W.nextOrb = W.kills + GIANT.every;
+  p.giant = true; p.giantGlow = true; p.speedMul = 1.14; W.gv = 0;
+  sfx.play('grow');
+  juice.flash(0.22); juice.shake(9); juice.zoomPunch(0.05, 320, wx(p.x), wy(V.ground - 80));
+  particles.ring(o.x, o.y, 120, '#ffc23a', 0.45);
+  particles.ring(o.x, o.y, 70, C.w, 0.3);
+  particles.dots(o.x, o.y, 26, 620, '#ffc23a');
+  particles.dust(p.x, V.ground, 10, 60);
+  particles.text(p.x, V.ground - 210, 'GIANT!', C.pGiant ?? '#ffc23a', 54, 1.1);
+  W.crowd = Math.max(W.crowd, 1);
+}
+
+// landing a jump while GIANT: the floor jumps, and everyone near it goes up
+function giantStomp(p) {
+  const { particles, juice, sfx } = shell;
+  juice.shake(10); sfx.play('thud', 1);
+  particles.dust(p.x, V.ground, 12, 70);
+  particles.ring(p.x, V.ground - 6, 170, '#ffc23a', 0.32);
+  for (const e of W.enemies) {
+    if (!e.alive || e.entering || e.ragdolled || !e.onGround || Math.abs(e.x - p.x) > 180) continue;
+    applyHit(p, e, 'gstomp', e.x, V.ground - 50 * e.s);
+  }
+}
+
+function drawOrb(ctx, reduced) {
+  const o = W.orb;
+  if (o.landed && o.life < 2.5 && !reduced && Math.floor(o.life * 8) % 2 === 0) return;
+  const bob = o.landed && !reduced ? Math.sin(W.t * 4) * 5 : 0, y = o.y + bob, pu = reduced ? 1 : 1 + Math.sin(W.t * 7) * 0.08;
+  const gr = ctx.createRadialGradient(o.x, y, 4, o.x, y, 62 * pu);
+  gr.addColorStop(0, 'rgba(255,194,58,.6)'); gr.addColorStop(1, 'rgba(255,194,58,0)');
+  ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(o.x, y, 62 * pu, 0, 6.2832); ctx.fill();
+  ctx.fillStyle = '#ffc23a'; ctx.strokeStyle = '#3a2500'; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.arc(o.x, y, 19, 0, 6.2832); ctx.fill(); ctx.stroke();
+  // a little up arrow, because it makes you bigger
+  ctx.strokeStyle = '#3a2500'; ctx.lineWidth = 4; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  ctx.beginPath(); ctx.moveTo(o.x, y + 10); ctx.lineTo(o.x, y - 9); ctx.moveTo(o.x - 8, y - 2); ctx.lineTo(o.x, y - 10); ctx.lineTo(o.x + 8, y - 2); ctx.stroke();
+  const a = W.t * 2.4;
+  ctx.strokeStyle = '#ffc23a'; ctx.lineWidth = 2.5;
+  ctx.beginPath(); ctx.arc(o.x, y, 29 * pu, a, a + 1.9); ctx.stroke();
+  ctx.beginPath(); ctx.arc(o.x, y, 29 * pu, a + 3.14, a + 5.04); ctx.stroke();
+}
+
+function drawGiantAura(ctx, alpha, reduced) {
+  const p = W.player, r = p.rig;
+  const x = r.px[PELV] + (r.x[PELV] - r.px[PELV]) * alpha, y = r.py[PELV] + (r.y[PELV] - r.py[PELV]) * alpha;
+  const R = 92 * p.s * (reduced ? 1 : 1 + Math.sin(W.t * 9) * 0.05);
+  const gr = ctx.createRadialGradient(x, y, 8, x, y, R);
+  gr.addColorStop(0, 'rgba(255,194,58,.34)'); gr.addColorStop(1, 'rgba(255,194,58,0)');
+  ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(x, y, R, 0, 6.2832); ctx.fill();
+}
+
+// the time left, as a ring over the head: it travels with the player and fits every screen size
+function drawGiantTimer(ctx, alpha) {
+  const p = W.player, r = p.rig;
+  const x = r.px[HEAD] + (r.x[HEAD] - r.px[HEAD]) * alpha, y = (r.py[HEAD] + (r.y[HEAD] - r.py[HEAD]) * alpha) - 38 * p.s;
+  const R = 15, k = clamp(W.giantT / GIANT.dur, 0, 1);
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = 'rgba(9,10,15,.65)'; ctx.lineWidth = 7; ctx.beginPath(); ctx.arc(x, y, R, 0, 6.2832); ctx.stroke();
+  ctx.strokeStyle = W.giantT < 2 ? C.acc : '#ffc23a'; ctx.lineWidth = 4;
+  ctx.beginPath(); ctx.arc(x, y, R, -Math.PI / 2, -Math.PI / 2 + 6.2832 * k); ctx.stroke();
+}
+
 function afterStep(f) {
   const { sfx, juice, particles } = shell;
   if (f.evLand) {
     particles.dust(f.x, V.ground, 6, 24);
+    if (f.giant) giantStomp(f);
     if (f.team === 'p') sfx.play('thud', 0.25);
     f.evLand = 0;
   }
@@ -783,8 +908,8 @@ function resolveAttacks() {
     const targets = a.team === 'p' ? W.enemies : [W.player];
     for (const v of targets) {
       if (a.atkHit.has(v) || v.state === 'dead' || v.entering) continue;
-      if (v.team === 'p' && (v.invuln > 0 || v.ragdolled || v.state === 'getup' || !v.alive)) continue;
-      if (!hitTest(hx, hy, spec.r, v)) continue;
+      if (v.team === 'p' && (v.invuln > 0 || v.ragdolled || v.state === 'getup' || !v.alive || v.atkName === 'slide' && v.state === 'atk')) continue;
+      if (!hitTest(hx, hy, spec.r * (a.giant ? a.s : 1), v)) continue;
       a.atkHit.add(v);
       applyHit(a, v, a.atkName, hx, hy);
     }
@@ -795,17 +920,17 @@ function applyHit(a, v, name, hx, hy) {
   const { juice, particles, sfx } = shell;
   const spec = ATK[name];
   const byPlayer = a.team === 'p';
-  const dir = a.face || sign(v.x - a.x);
+  const dir = name === 'gstomp' ? (sign(v.x - a.x) || 1) : a.face || sign(v.x - a.x);
   const juggling = v.ragdolled;
 
   // ---- shield guard: punches from the front bounce off, a kick breaks it
   if (byPlayer && v.guard && !juggling && v.state !== 'getup' && sign(a.x - v.x) === v.face) {
-    if (name !== 'k') { blocked(a, v, hx, hy); return; }
+    if (name !== 'k' && name !== 'slide' && name !== 'gstomp') { blocked(a, v, hx, hy); return; }
     breakGuard(v, dir, false);
   }
 
   const dmgScale = byPlayer ? 1 : (1 + W.enrage * 0.9 + W.hard * 0.35);
-  const dmg = spec.dmg * dmgScale;
+  const dmg = spec.dmg * dmgScale * (a.giant ? 2 : 1) * (v.giant ? 0.5 : 1);   // GIANT hits twice as hard and takes half
   v.hp -= dmg;
   const kill = v.hp <= 0;
   const I = clamp(spec.power * (kill ? 1.12 : 1), 0, 1.15);
@@ -818,8 +943,9 @@ function applyHit(a, v, name, hx, hy) {
   } else {
     launch = kill || spec.launch || juggling;
     if (v.kind === 'brute' && !kill && !juggling && spec.power < 0.9) launch = false;
+    if (v.giant && !kill) launch = false;
     const m = v.mass;
-    let vx = dir * spec.vx / m, vy = spec.vy / Math.pow(m, 0.7);
+    let vx = dir * spec.vx * (a.giant ? 1.25 : 1) / m, vy = spec.vy / Math.pow(m, 0.7);
     if (kill) { vx *= 1.3; vy = Math.min(vy, -300 / Math.pow(m, 0.6)); }
     if (!byPlayer && !v.alive) { vx *= 1.3; vy *= 1.1; }
     if (juggling) {
@@ -855,6 +981,7 @@ function applyHit(a, v, name, hx, hy) {
   if (kill) sfx.play('kill', I);
 
   // ---- bookkeeping
+  if (byPlayer && name === 'slide') { addScore(50); shell.particles.text(v.x, V.ground - 120 * v.s, 'TACKLE! +50', C.acc, 24); }
   if (byPlayer) {
     registerHit(v, kill, juggling, spec, hx, hy);
     if (kill) onKill(v);
@@ -1399,7 +1526,10 @@ g.render = (ctx, alpha, sh, dt = 0) => {
   for (const f of W.enemies) if (f.state === 'rag') drawFighter(ctx, f, alpha, reduced, hitstopping, C);
   for (const f of W.enemies) if (f.state !== 'dead' && f.state !== 'rag' && f.s > 1.3) drawFighter(ctx, f, alpha, reduced, hitstopping, C);
   for (const f of W.enemies) if (f.state !== 'dead' && f.state !== 'rag' && f.s <= 1.3) drawFighter(ctx, f, alpha, reduced, hitstopping, C);
+  if (W.orb) drawOrb(ctx, reduced);
+  if (W.giantT > 0) drawGiantAura(ctx, alpha, reduced);
   drawFighter(ctx, W.player, alpha, reduced, hitstopping, C);
+  if (W.giantT > 0) drawGiantTimer(ctx, alpha);
   drawWaves(ctx);
   refreshAvoid();
   particles.draw(ctx, alpha);
@@ -1517,6 +1647,13 @@ g.debug = {
   },
   // put a standing enemy at x (hazard tests)
   placeEnemy(x, kind = 'grunt') { const e = spawnEnemy(kind, 1); e.entering = false; e.invuln = 0; e.drawT = 0; e.x = x; e.ai.cd = 99; e.speedMul = 0; return true; },
+  power() { const p = W.player; return { s: p.s, giant: p.giant, giantT: W.giantT, orb: W.orb && { ...W.orb }, nextOrb: W.nextOrb, kills: W.kills, giants: W.giants, state: p.state, atk: p.atkName, x: p.x, face: p.face, hp: p.hp, slideCd: W.slideCd }; },
+  orb(x) { W.nextOrb = 1e9; W.orb = { x, y: V.ground - 42, vy: 0, t: 0, life: GIANT.orbLife, landed: true }; },
+  orbDue() { W.nextOrb = W.kills; },
+  // put a live enemy right next to the player, mid-swing, for the dodge tests
+  swingAtPlayer() { const p = W.player, e = W.enemies.find((f) => f.alive && !f.ragdolled); if (!e) return false; e.entering = false; e.invuln = 0; e.x = p.x + 40; e.face = -1; e.state = 'idle'; e.startAttack('e1'); return true; },
+  // a grunt standing beside the player, for the stomp test
+  besidePlayer() { const p = W.player, e = W.enemies.find((f) => f.alive && !f.ragdolled); if (!e) return false; e.entering = false; e.x = p.x + 90; e.y = V.ground; e.onGround = true; e.state = 'idle'; return true; },
   placePlayer(x) { W.player.x = x; W.player.vx = 0; },
   hazard(x, warnScale = 1) { W.phase = W.phase === 'banner' ? 'fight' : W.phase; spawnHazard(x, warnScale); return W.hz.x; },
   // kill everything standing (and empty the queue) through the normal kill path

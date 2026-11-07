@@ -19,8 +19,10 @@ export const ATK = {
   bash:  { dur: 0.62, a: 0.55, b: 0.76, part: HAND_F, r: 24, dmg: 9,  vx: 560, vy: -180, power: 0.50, launch: false, kb: 280, tele: true },
   smash: { dur: 0.92, a: 0.66, b: 0.84, part: HAND_F, r: 30, dmg: 26, vx: 820, vy: -520, power: 0.85, launch: true,  kb: 0,   tele: true },
   bsmash:{ dur: 1.00, a: 0.68, b: 0.84, part: HAND_F, r: 40, dmg: 30, vx: 960, vy: -600, power: 0.95, launch: true,  kb: 0,   tele: true },
+  slide: { dur: 0.52, a: 0.04, b: 0.78, part: FOOT_F, r: 26, dmg: 1, vx: 240, vy: -640, power: 0.6, launch: true, kb: 0 },
   // area attacks are resolved by the game (boss shockwaves, the player's super), not by a hit sphere
   stomp: { dur: 1.15, a: 0.60, b: 0.70, part: HAND_F, r: 0,  dmg: 16, vx: 0,   vy: 0,    power: 0.80, launch: true,  kb: 0,   tele: true, area: true },
+  gstomp:{ dur: 0.01, a: 0, b: 0, part: FOOT_F, r: 0, dmg: 1, vx: 380, vy: -640, power: 0.65, launch: true, kb: 0, area: true },
   roar:  { dur: 0.55, a: 0.30, b: 0.55, part: HAND_F, r: 0,  dmg: 0,  vx: 0,   vy: 0,    power: 1.00, launch: true,  kb: 0,   area: true },
 };
 
@@ -74,7 +76,7 @@ export class Fighter {
     this.rig = new Rig(this.s, 1);
     // AI state
     this.ai = { engage: false, cd: 0.6 + Math.random() * 0.8, hover: 150 + Math.random() * 90, jitter: Math.random() * 6 };
-    this.speedMul = 1;
+    this.speedMul = 1; this.giant = false; this.giantGlow = false;
     this.pose();
     this.rig.snapPose(this.tx, this.ty);
     // scarf (player only): a short trailing chain
@@ -103,6 +105,8 @@ export class Fighter {
     this.onGround = false; this.bowled.clear(); this.ai.engage = false;
     this.rig.launch(vx, vy, spin);
   }
+
+  setScale(v) { this.s = v; this.rig.setScale(v); }
 
   die() { if (this.state === 'rag') this.state = 'dead'; this.deadT = 0; }
 
@@ -138,7 +142,7 @@ export class Fighter {
       this.vx *= 0.9;
       if (this.t >= this.stunT) { this.state = 'idle'; this.t = 0; }
     } else if (this.state === 'atk') {
-      this.vx *= 0.86;
+      this.vx *= this.atkName === 'slide' ? 0.972 : 0.86;
       if (this.t >= this.atk.dur) {
         const wasPunch = this.atkName[0] === 'p';
         this.state = 'idle'; this.t = 0; this.atk = null; this.tele = false;
@@ -295,6 +299,13 @@ export class Fighter {
         P.lean = lerp(0.3, -0.06, q); P.pdx = 8 * q; P.hbx = 4; P.hby = lerp(12, -10, q);
         P.ffx = 22; P.ffy = 0; P.fbx = -18; P.fby = q * 8;
       }
+    } else if (name === 'slide') {
+      // feet first along the floor: drop in fast, rise out of it at the end
+      const e = ease.outQuad(clamp(u / 0.14, 0, 1)) * (1 - ease.inOutQuad(clamp((u - 0.76) / 0.24, 0, 1)));
+      P.crouch = 30 * e; P.lean = lerp(0.12, -0.95, e); P.tilt = 0.5 * e;
+      P.ffx = lerp(16, 58, e); P.ffy = 6 * e; P.fbx = lerp(-16, 20, e); P.fby = 0;
+      P.hfx = lerp(18, 26, e); P.hfy = lerp(-2, -22, e);
+      P.hbx = lerp(8, -28, e); P.hby = lerp(6, 28, e);
     } else if (name === 'k') {
       let e;
       if (u < a.a) e = 0.35 * ease.outQuad(u / a.a);
@@ -388,8 +399,8 @@ export function drawFighter(ctx, f, alpha, reduced, hitstopping, pal = PAL.ring)
   }
   const flash = f.flash > 0, player = f.team === 'p', boss = f.kind === 'boss';
   const fc = player ? pal.flashP : pal.flashE;
-  const main = flash ? fc : player ? pal.pMain : boss ? pal.bossMain : pal.eMain || k.color;
-  const back = flash ? fc : player ? pal.pBack : boss ? pal.bossBack : pal.eBack || k.back;
+  const main = flash ? fc : player ? (f.giantGlow ? pal.pGiant ?? '#ffc23a' : pal.pMain) : boss ? pal.bossMain : pal.eMain || k.color;
+  const back = flash ? fc : player ? (f.giantGlow ? pal.pGiantB ?? '#c98a12' : pal.pBack) : boss ? pal.bossBack : pal.eBack || k.back;
   const lw = k.lw * s;
 
   let a = f.fade;

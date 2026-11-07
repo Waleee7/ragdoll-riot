@@ -5,7 +5,7 @@
   "description": "A stickman ragdoll brawler for the browser: three living locations and an endless mode that travels between them. Plain HTML, CSS and JavaScript: zero runtime dependencies.",
   "scripts": {
     "start": "python3 -m http.server 5173",
-    "test": "node scripts/verify.mjs && node scripts/features.mjs && node scripts/stages.mjs && node scripts/real-play.mjs",
+    "test": "node scripts/verify.mjs && node scripts/features.mjs && node scripts/stages.mjs && node scripts/real-play.mjs && node scripts/moves.mjs",
     "build:art": "node scripts/build-art.mjs"
   },
   "devDependencies": {

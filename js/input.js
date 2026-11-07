@@ -121,7 +121,9 @@ export class Input {
       const wantUp = dy < -0.6;
       if (wantUp && !this.virtual.up) this.latch.set('up', 'touch');
       this.virtual.up = wantUp;
-      this.virtual.down = dy > 0.6;
+      const wantDown = dy > 0.6;
+      if (wantDown && !this.virtual.down) this.latch.set('down', 'touch');
+      this.virtual.down = wantDown;
     };
     const end = () => {
       id = null;

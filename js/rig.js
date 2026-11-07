@@ -92,6 +92,13 @@ export class Rig {
     for (let i = 0; i < N; i++) { this.px[i] -= vx * DT; this.py[i] -= vy * DT; }
   }
 
+  // Grow or shrink the body in place (the GIANT power-up): bone lengths and radii follow.
+  setScale(v) {
+    const k = v / this.s; this.s = v;
+    for (let i = 0; i < N; i++) this.rad[i] *= k;
+    for (const st of this.sticks) st[2] *= k;
+  }
+
   scaleVelocity(k) {
     for (let i = 0; i < N; i++) {
       this.px[i] = this.x[i] - (this.x[i] - this.px[i]) * k;
