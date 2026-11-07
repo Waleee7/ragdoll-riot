@@ -152,6 +152,11 @@ html[data-touch="1"] body[data-state="play"] #touch { display: block; }
   .btn { padding: 14px 16px; }
 }
 
+/* short portrait phones: the floor line sits low, so SUPER moves off the fight, above KICK */
+@media (max-aspect-ratio: 1/1) and (max-height: 700px) {
+  .tbtn-c { width: 56px; height: 56px; font-size: 12px; right: calc(136px + var(--safe-r)); bottom: calc(118px + var(--safe-b)); }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
   #banner.show { animation: banner-rm 1.15s linear both !important; }

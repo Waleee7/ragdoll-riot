@@ -945,6 +945,7 @@ function onKill(v, via) {
   if (W.mode === 'play' && W.phase === 'fight' && left === 0 && W.queue.length === 0) {
     // last enemy of the wave: slow-mo beat with a camera push on the body
     W.finisher = true;
+    hideTip();                                // the finisher word is the payoff: nothing sits over it
     if (via === 'wall') {
       // launched into the wall hazard: longer slow-mo, the stage's big word and a bonus
       W.wallFinishers++;
@@ -1295,7 +1296,7 @@ function stepTips() {
     return;
   }
   if (W.breaking || backdrop.T?.tag === 'break') return;     // tips wait out the wipe; they are shown once the new place is in
-  if (W.phase === 'banner') return;                         // a tip never lands while the wave banner is still up
+  if (W.phase === 'banner' || W.phase === 'clear' || W.finisher) return;   // a tip never lands over the wave banner or a finisher
   const i = W.tipQ.findIndex((t) => W.runT >= t.at);
   if (i < 0) return;
   const t = W.tipQ.splice(i, 1)[0];
