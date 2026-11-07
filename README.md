@@ -1,9 +1,9 @@
 <p align="center">
-  <a href="https://ragdoll-riot-infinite.vercel.app"><img src="docs/banner.png" alt="RAGDOLL RIOT: a stickman ragdoll brawler for the browser" width="100%"></a>
+  <a href="https://ragdoll-riot.vercel.app"><img src="docs/banner.png" alt="RAGDOLL RIOT: a stickman ragdoll brawler for the browser" width="100%"></a>
 </p>
 
 <p align="center">
-  <a href="https://ragdoll-riot-infinite.vercel.app"><img alt="Play now" src="https://img.shields.io/badge/PLAY_NOW-ragdoll--riot--infinite.vercel.app-ff3e3e?style=for-the-badge&labelColor=090a0f"></a>
+  <a href="https://ragdoll-riot.vercel.app"><img alt="Play now" src="https://img.shields.io/badge/PLAY_NOW-ragdoll--riot--infinite.vercel.app-ff3e3e?style=for-the-badge&labelColor=090a0f"></a>
   <img alt="60 fps with 12 ragdolls" src="https://img.shields.io/badge/60_FPS-12_ragdolls_on_screen-eceef4?style=for-the-badge&labelColor=090a0f">
   <img alt="Zero runtime dependencies" src="https://img.shields.io/badge/runtime_deps-0-eceef4?style=for-the-badge&labelColor=090a0f">
   <img alt="223 browser checks passing" src="https://img.shields.io/badge/browser_checks-223_passing-4fd18b?style=for-the-badge&labelColor=090a0f">
@@ -20,7 +20,7 @@
 
 ## Play
 
-**[ragdoll-riot-infinite.vercel.app](https://ragdoll-riot-infinite.vercel.app)** on desktop or phone. Nothing to install.
+**[ragdoll-riot.vercel.app](https://ragdoll-riot.vercel.app)** on desktop or phone. Nothing to install.
 
 ## Locations and modes
 
@@ -158,7 +158,7 @@ npm test
 ## Run it locally
 
 ```sh
-git clone https://github.com/Waleee7/ragdoll-riot-infinite && cd ragdoll-riot-infinite
+git clone https://github.com/Waleee7/ragdoll-riot && cd ragdoll-riot
 python3 -m http.server 5173   # then open http://localhost:5173
 ```
 
