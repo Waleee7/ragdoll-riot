@@ -55,7 +55,7 @@ body[data-state="play"] #hud { opacity: 1; }
 
 /* centered wave banner (game sets text + toggles .show) */
 #banner { position: fixed; z-index: 4; left: 0; right: 0; top: 24%; text-align: center; pointer-events: none; opacity: 0;
-  font: clamp(64px, 14vw, 180px)/0.9 var(--display); letter-spacing: .02em; text-transform: uppercase; text-shadow: 0 6px 40px rgba(0,0,0,.6); }
+  font: clamp(48px, 14vw, 180px)/0.9 var(--display); text-wrap: balance; letter-spacing: .02em; text-transform: uppercase; text-shadow: 0 6px 40px rgba(0,0,0,.6); }
 #banner small { display: block; margin-top: 10px; font: 600 clamp(11px, 1.6vw, 15px)/1 var(--mono); letter-spacing: .3em; color: var(--accent-ink); }
 #banner.show { animation: banner 1.15s cubic-bezier(.2,.8,.2,1) both; }
 @keyframes banner {
@@ -65,10 +65,18 @@ body[data-state="play"] #hud { opacity: 1; }
   100% { opacity: 0; transform: translateX(40px); }
 }
 
+/* phones: the banner takes the space the HUD leaves (game.js measures it: --ban-t portrait, --ban-l/--ban-r landscape) */
+@media (max-aspect-ratio: 1/1) { #banner { top: var(--ban-t, 24%); font-size: clamp(38px, 11.5vw, 150px); } }
+@media (min-aspect-ratio: 1/1) and (max-width: 1060px) {
+  #banner { top: 22%; left: var(--ban-l, 0); right: var(--ban-r, 0); font-size: clamp(34px, min(11vw, 13vh), 110px); }
+  #banner small { letter-spacing: .2em; }
+}
+
 /* screens */
 .screen { position: fixed; z-index: 6; inset: 0; display: grid; align-items: center; justify-items: start;
   padding: calc(56px + var(--safe-t)) calc(24px + var(--safe-r)) calc(24px + var(--safe-b)) calc(24px + var(--safe-l));
-  background: linear-gradient(90deg, rgba(9,10,15,.94) 0%, rgba(9,10,15,.72) 38%, rgba(9,10,15,.08) 78%); cursor: pointer; }
+  background: linear-gradient(90deg, rgba(9,10,15,.94) 0%, rgba(9,10,15,.72) 38%, rgba(9,10,15,.08) 78%); cursor: pointer;
+  overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y; align-items: safe center; }
 .screen.center { justify-items: center; text-align: center; background: rgba(9,10,15,.7); }
 .panel { width: min(100%, 620px); animation: rise 360ms cubic-bezier(.2,.8,.2,1) both; }
 @keyframes rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
@@ -120,10 +128,11 @@ html[data-touch="1"] .keys .tch { display: flex; }
 html[data-touch="1"] body[data-state="play"] #touch { display: block; }
 .stick-zone { position: absolute; left: 0; bottom: 0; width: 47%; height: 52%; pointer-events: auto; touch-action: none; }
 .stick { position: absolute; left: calc(22px + var(--safe-l)); bottom: calc(34px + var(--safe-b)); width: 116px; height: 116px; border-radius: 50%;
-  border: 2px solid rgba(236,238,244,.28); background: radial-gradient(circle, rgba(255,255,255,.05), rgba(255,255,255,0) 70%); transition: border-color 100ms ease-out; }
+  border: 2px solid rgba(236,238,244,.6); background: radial-gradient(circle, rgba(9,10,15,.5), rgba(9,10,15,.34) 70%);
+  box-shadow: 0 0 0 2px rgba(9,10,15,.6), inset 0 0 0 1px rgba(9,10,15,.5); transition: border-color 100ms ease-out; }
 .stick.active { border-color: rgba(255,62,62,.9); }
 .knob { position: absolute; left: 50%; top: 50%; width: 54px; height: 54px; margin: -27px 0 0 -27px; border-radius: 50%;
-  background: rgba(236,238,244,.22); border: 2px solid rgba(236,238,244,.6); }
+  background: rgba(236,238,244,.4); border: 2px solid var(--fg); box-shadow: 0 0 0 2px rgba(9,10,15,.6); }
 .stick.active .knob { background: rgba(255,62,62,.5); border-color: var(--fg); }
 .tbtn { position: absolute; pointer-events: auto; touch-action: none; border-radius: 50%; border: 2px solid rgba(255,62,62,.85);
   background: rgba(9,10,15,.55); color: var(--fg); font: 17px/1 var(--display); letter-spacing: .08em; text-transform: uppercase;
@@ -194,22 +203,37 @@ html[data-touch="1"] .rr-riot b { display: none; }
 .rr-boss.mad .rr-track i { animation: bossmad .45s ease-in-out infinite alternate; }
 @keyframes bossmad { to { background: var(--fg); } }
 @media (max-aspect-ratio: 1/1) { .rr-boss { top: calc(196px + var(--safe-t)); width: calc(100vw - 32px); } }
+/* landscape, narrower than ~1060px: the HP/RIOT block (to x=326) would run into a 38vw centred plate, so the boss bar becomes one
+   row in the free strip at the top, between the byline and the pause/mute buttons */
+@media (min-aspect-ratio: 1/1) and (max-width: 1060px) {
+  .rr-boss { top: calc(12px + var(--safe-t)); width: min(420px, 44vw); display: flex; align-items: center; gap: 10px; }
+  .rr-boss p { display: contents; }
+  .rr-boss p em { order: 1; font-size: 20px; white-space: nowrap; }
+  .rr-boss .rr-track { order: 2; flex: 1; }
+  .rr-boss p span { order: 3; line-height: 1; }
+}
 
 /* ---- tips + key legend ---- */
 .tip { position: absolute; left: 50%; bottom: calc(56px + var(--safe-b)); width: max-content; max-width: min(660px, calc(100vw - 32px));
-  transform: translate(-50%, 8px); opacity: 0; padding: 10px 14px 10px 12px; background: rgba(9,10,15,.88);
+  transform: translate(-50%, 8px); opacity: 0; padding: 10px 14px 10px 12px; background: #090a0f;
   border: 1px solid var(--line); border-left: 3px solid var(--accent); font-size: 12px; letter-spacing: .08em; color: var(--fg);
   transition: opacity 200ms ease-out, transform 200ms ease-out; }
 .tip::before { content: 'TIP'; margin-right: 10px; font-weight: 700; letter-spacing: .22em; color: var(--accent-ink); }
 .tip.show { opacity: 1; transform: translate(-50%, 0); }
-html[data-touch="1"] .tip { bottom: auto; top: calc(262px + var(--safe-t)); }
+/* touch, portrait: under the banner (24vh + its sub-line), above the fighters; touch, landscape: on the floor strip between the stick and the buttons */
+html[data-touch="1"] .tip { bottom: auto; top: max(calc(24vh + 104px + var(--safe-t)), calc(var(--banner-b, 0px) + 14px)); }
+/* a boss is up: the tip drops under the boss bar so the bar is never covered (the bar's bottom edge is measured in game.js) */
+@media (max-aspect-ratio: 1/1) { html[data-touch="1"] .tip.after-boss { top: calc(var(--boss-b, 0px) + 10px); } }
+@media (min-aspect-ratio: 1/1) {
+  html[data-touch="1"] .tip { top: auto; bottom: calc(10px + var(--safe-b)); max-width: min(430px, calc(100vw - 420px)); }
+}
 .legend { position: absolute; left: 50%; bottom: calc(14px + var(--safe-b)); transform: translateX(-50%); display: flex; flex-wrap: wrap;
-  justify-content: center; gap: 6px 18px; width: max-content; max-width: calc(100vw - 32px); font-size: 10px; letter-spacing: .16em; color: var(--dim);
-  transition: opacity 600ms ease-out; }
+  justify-content: center; gap: 6px 18px; width: max-content; max-width: calc(100vw - 32px); font-size: 10px; letter-spacing: .16em; color: #c9ccd8;
+  background: rgba(9,10,15,.78); padding: 6px 12px; transition: opacity 600ms ease-out; }
 .legend span { display: inline-flex; align-items: center; gap: 4px; }
 .legend kbd { font: 700 10px/1 var(--mono); min-width: 20px; padding: 4px 5px; margin-right: 2px; text-align: center; color: var(--fg);
   border: 1px solid #3a3e52; background: rgba(9,10,15,.7); }
-.legend.dim { opacity: .4; }
+.legend.dim { opacity: .6; }
 body[data-legend="0"] .legend, html[data-touch="1"] .legend { display: none; }
 
 /* ---- title extras ---- */
@@ -240,4 +264,147 @@ html[data-touch="1"] .btn kbd { display: none; }
   #title .row .btn { padding: 13px 11px; font-size: 11px; letter-spacing: .08em; gap: 8px; justify-content: center; }
   #title .row .btn.primary { flex: 1; }
   #title .row .btn kbd { display: none; }
+}
+
+/* ---- location picker (title) ---- */
+#title { overflow-y: auto; align-items: safe center; overscroll-behavior: contain; }
+.picker { margin: 18px 0 0; cursor: default; }
+.pick-h { margin: 0 0 8px; font-size: 11px; font-weight: 700; letter-spacing: .22em; color: var(--dim); }
+.pick-h b { margin-left: 8px; color: var(--fg); letter-spacing: .14em; }
+.pick-keys { float: right; display: inline-flex; gap: 4px; }
+.pick-keys kbd { font: 700 10px/1 var(--mono); min-width: 22px; padding: 4px 5px; text-align: center; border: 1px solid #3a3e52; background: rgba(9,10,15,.7); }
+html[data-touch="1"] .pick-keys { display: none; }
+.cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.card { display: block; width: 100%; margin: 0; padding: 0; text-align: left; font: inherit; color: var(--fg); cursor: pointer; border-radius: 0;
+  background: rgba(9,10,15,.78); border: 1px solid var(--line); transition: border-color 100ms ease-out, transform 100ms ease-out; }
+.card:hover { border-color: var(--dim); }
+.card:active { transform: translateY(1px); }
+.card.nothumb .thumb { display: none; }
+.card.nothumb b { padding-top: 12px; }
+.card .thumb { display: block; aspect-ratio: 16 / 8; overflow: hidden; background: var(--bg2); border-bottom: 1px solid var(--line); }
+.card img { display: block; width: 100%; height: 100%; object-fit: cover; filter: saturate(.7) brightness(.72); transition: filter 100ms ease-out; }
+.card:hover img { filter: saturate(.9) brightness(.9); }
+.card b { display: block; padding: 7px 8px 3px; font: 15px/1.05 var(--display); letter-spacing: .04em; font-weight: 400; }
+.card small { display: block; padding: 0 8px 8px; font-size: 9px; letter-spacing: .16em; color: var(--dim); }
+.card[aria-pressed="true"] { border-color: var(--accent); box-shadow: inset 0 3px 0 var(--accent); }
+.card[aria-pressed="true"] img { filter: none; }
+.card[aria-pressed="true"] small { color: var(--accent-ink); }
+.pick-blurb { margin: 8px 0 0; min-height: 2.9em; max-width: 56ch; font-size: 11px; letter-spacing: .06em; color: var(--dim); }
+@media (max-width: 520px) {
+  .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .card .thumb { aspect-ratio: 16 / 7; }
+  .card b { font-size: 14px; }
+  .picker { margin-top: 14px; }
+}
+/* short or narrow screens: the controls list lives on the How to Play screen, so the title keeps the picker and PLAY in view */
+@media (max-height: 960px) { #title .keys { display: none; } }
+@media (max-width: 520px), (max-height: 760px) { #title .keys, #title .new { display: none; } }
+@media (max-height: 700px) {
+  #title .pitch, .pick-blurb { display: none; }
+  #title .eyebrow { margin-bottom: 8px; }
+  #title .row { margin-top: 14px; }
+  #title .best { margin-top: 10px; }
+}
+@media (max-height: 520px) {
+  .screen { padding-top: calc(44px + var(--safe-t)); padding-bottom: calc(10px + var(--safe-b)); }
+  #title .eyebrow { display: none; }
+  #title .logo { font-size: 50px; }
+  #title .logo span { display: inline; }
+  #title .logo span + span { margin-left: .22em; }
+  #title .picker { margin-top: 10px; }
+  #title .row { margin-top: 10px; }
+  #title .btn { min-height: 44px; padding: 11px 16px; }
+  #title .best { margin-top: 8px; }
+  .card b { padding: 5px 7px 2px; font-size: 14px; }
+  .card small { padding: 0 7px 6px; }
+}
+@media (max-height: 380px) { .card .thumb { aspect-ratio: 16 / 6; } }
+
+/* ---- HUD extras ---- */
+.rr-wave i { font-style: normal; color: var(--dim); margin-left: 8px; letter-spacing: .18em; }
+.rr-boss p em { font-style: normal; }
+body[data-stage="pit"] .rr-boss .rr-track i { background: #ff8a2a; }
+body[data-stage="margins"] .rr-boss .rr-track i { background: #ff3e3e; }
+/* a soft scrim keeps the HUD readable over bright spots in the art (not needed on paper: it gets plates instead) */
+#hud::before { content: ''; position: absolute; inset: 0 0 auto 0; height: 170px; pointer-events: none;
+  background: linear-gradient(180deg, rgba(9,10,15,.62), rgba(9,10,15,0)); }
+body[data-paper="1"] #hud::before { display: none; }
+
+/* ---- The Margins: ink on paper. The HUD sits on dark label plates so it stays legible over the page. ---- */
+body[data-paper="1"] .hud-score, body[data-paper="1"] .rr-hp, body[data-paper="1"] .rr-riot, body[data-paper="1"] .rr-wave,
+body[data-paper="1"] .rr-combo.on, body[data-paper="1"] .rr-boss, body[data-paper="1"] .legend {
+  background: rgba(9,10,15,.86); padding: 6px 10px; box-shadow: 0 2px 0 rgba(9,10,15,.25); }
+body[data-paper="1"] .hud-score { padding: 8px 12px 6px; }
+body[data-paper="1"] .rr-combo.on { padding: 6px 10px 8px; }
+body[data-paper="1"] .rr-boss { padding: 8px 10px 10px; }
+@media (min-aspect-ratio: 1/1) and (max-width: 1060px) { body[data-paper="1"] .rr-boss { padding: 6px 10px; } }
+body[data-paper="1"] .rr-boss p { margin-bottom: 6px; }
+/* plates are taller than the bare rows, so the stack is re-spaced to keep them from touching */
+body[data-paper="1"] .rr-hp { top: calc(48px + var(--safe-t)); }
+body[data-paper="1"] .rr-riot { top: calc(80px + var(--safe-t)); }
+body[data-paper="1"] .rr-wave { top: calc(112px + var(--safe-t)); }
+body[data-paper="1"] .rr-combo { top: calc(146px + var(--safe-t)); }
+@media (max-aspect-ratio: 1/1) { body[data-paper="1"] .rr-boss { top: calc(230px + var(--safe-t)); } }
+body[data-paper="1"] #banner { color: #17181f; text-shadow: 0 2px 0 rgba(244,239,227,.9), 0 0 28px rgba(244,239,227,.8); }
+body[data-paper="1"] #banner small { display: block; width: fit-content; margin-inline: auto; padding: 7px 12px; background: rgba(9,10,15,.88); color: var(--accent-ink); text-shadow: none; }
+body[data-paper="1"] .bar .daytag { background: rgba(9,10,15,.86); padding: 4px 8px; color: var(--accent-ink); }
+body[data-paper="1"] .icon-btn { background: rgba(9,10,15,.86); }
+@media (max-width: 520px) { body[data-paper="1"] .rr-combo.on { width: min(240px, 54vw); } }
+
+/* title buttons and labels must stay readable over bright art (The Margins paper) */
+#title .btn.ghost { background: rgba(9,10,15,.78); }
+#title .btn.ghost:hover { background: rgba(9,10,15,.92); }
+#title .best, #title .pick-h, #title .pick-blurb, #title .pitch { text-shadow: 0 1px 8px rgba(9,10,15,.9), 0 0 2px rgba(9,10,15,.9); }
+
+/* ---- game-over and pause panels: compact on short screens, always scrollable (.screen scrolls) ---- */
+@media (max-height: 760px) {
+  #over .big-score { font-size: clamp(72px, min(22vw, 18vh), 240px); margin-top: 8px; }
+  #over .logo.sm, #paused .logo.sm { font-size: clamp(40px, min(9vw, 9vh), 96px); }
+  #over .keys.stats { margin-top: 12px; }
+  #over .row, #paused .row { margin-top: 16px; }
+}
+@media (max-height: 520px) {
+  #paused .keys { display: none; }
+  #paused .logo.sm, #over .logo.sm { font-size: 38px; }
+  #over .panel { width: min(100%, 800px); display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: 32px; align-content: center; justify-items: start; }
+  #over .panel > * { grid-column: 1; }
+  #over .eyebrow { margin-bottom: 6px; }
+  #over .big-score { font-size: 64px; margin-top: 6px; }
+  #over .best { margin-top: 8px; }
+  #over .keys.stats { grid-column: 2; grid-row: 1 / span 5; grid-template-columns: 1fr; margin: 0; width: 100%; }
+  #over .keys.stats > div { padding: 4px 0; }
+  #over .row { margin-top: 14px; }
+  #over .btn, #paused .btn { min-height: 44px; padding: 11px 14px; }
+}
+
+/* ---- panel plates: title, game over and pause text sits on a dark plate, so it reads over paper and bright art at every size.
+   The gradient scrim behind it keeps the look; the plate guarantees the contrast. ---- */
+.screen:not(.howto) .panel { background: rgba(9,10,15,.86); padding: 18px 20px 20px; box-shadow: 0 0 36px 16px rgba(9,10,15,.55); }
+#paused { background: rgba(9,10,15,.9); }
+.screen.center { background: rgba(9,10,15,.9); }
+.howto .panel.wide { background: var(--bg); }
+@media (max-height: 520px) { .screen:not(.howto) .panel { padding: 10px 16px 12px; } }
+
+/* ---- tablet portrait: everything is a size up (the HUD blocks are zoomed together with their offsets) ---- */
+@media (min-width: 700px) and (min-height: 900px) and (max-aspect-ratio: 1/1) {
+  .hud-score, .rr-hp, .rr-riot, .rr-wave, .rr-combo, .rr-boss, .tip, .legend { zoom: 1.5; }
+  .rr-hp, .rr-riot { width: min(300px, calc(52vw / 1.5)); }
+  .rr-combo { width: min(220px, calc(46vw / 1.5)); }
+  .rr-boss { width: calc((100vw - 32px) / 1.5); }
+  .tip { max-width: calc((100vw - 32px) / 1.5); }
+  .legend { max-width: calc((100vw - 32px) / 1.5); }
+  .screen:not(.howto) .panel, .panel.wide { width: min(100%, 760px); }
+  .screen:not(.howto) .panel { padding: 28px 30px 30px; }
+  .logo { font-size: clamp(64px, 21vw, 190px); }
+  .logo.sm { font-size: clamp(56px, 12vw, 120px); }
+  .eyebrow { font-size: 14px; }
+  .pitch { font-size: 18px; }
+  .pick-h, .pick-blurb, .best { font-size: 14px; }
+  .card b { font-size: 22px; } .card small { font-size: 12px; }
+  .btn { font-size: 16px; padding: 18px 26px; min-height: 58px; }
+  .bar .daytag, .back { font-size: 14px; } .icon-btn { width: 48px; height: 48px; }
+  .tbtn { font-size: 22px; }
+  .tbtn-a { width: 132px; height: 132px; bottom: calc(80px + var(--safe-b)); }
+  .tbtn-b { width: 108px; height: 108px; right: calc(166px + var(--safe-r)); bottom: calc(40px + var(--safe-b)); }
+  .tbtn-c { width: 90px; height: 90px; font-size: 18px; bottom: calc(232px + var(--safe-b)); }
 }

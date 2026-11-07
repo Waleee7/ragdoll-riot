@@ -37,11 +37,27 @@ export function createShell({ canvas, game }) {
     pauseBtn: $('pausebtn'), pauseHow: $('pause-how'),
   };
 
-  const view = { w: 1, h: 1, dpr: 1 };
+  const view = { w: 1, h: 1, dpr: 1, bgDpr: 1 };
   const shell = {
     canvas, bgCanvas, ctx, view, juice, particles, sfx, input, store, game, debug,
-    state: 'title', score: 0, best: Number(store.get(`${game.slug}:best`, 0)) || 0,
+    state: 'title', score: 0, best: 0, mode: 'infinite',
     hud: { root: el.hud },
+  };
+
+  /* ---------- location / mode: stored per mode, deep-linkable ---------- */
+  // Best score is kept per mode. The one pre-modes best belongs to the ring.
+  const bestKey = (m = shell.mode) => `${game.slug}:best:${m}`;
+  // A stored score is only trusted if it is a finite, non-negative number (corrupt storage must not print Infinity or -50).
+const cleanScore = (v) => { const n = Number(v); return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0; };
+if (store.get(bestKey('ring'), null) === null) { const old = cleanScore(store.get(`${game.slug}:best`, 0)); if (old) store.set(bestKey('ring'), old); }
+  const modes = game.modes || [];
+  const validMode = (m) => modes.some((x) => x.id === m);
+  const MODE_KEY = `${game.slug}:mode`;
+  const startMode = () => {
+    const q = new URLSearchParams(location.search).get('stage');
+    if (q && validMode(q)) return q;                        // ?stage=ring|pit|margins|infinite
+    const saved = store.get(MODE_KEY, null);
+    return validMode(saved) ? saved : modes[0]?.id;         // a bad stored value falls back to the default
   };
 
   /* ---------- sizing: crisp at devicePixelRatio ---------- */
@@ -51,8 +67,9 @@ export function createShell({ canvas, game }) {
     const w = Math.max(1, Math.round(r.width)), h = Math.max(1, Math.round(r.height));
     canvas.width = Math.round(w * dpr);
     canvas.height = Math.round(h * dpr);
-    if (bgCanvas) { bgCanvas.width = canvas.width; bgCanvas.height = canvas.height; }
-    view.w = w; view.h = h; view.dpr = dpr;
+    const bdpr = Math.min(dpr, 2);     // the backdrop layer: the art has no detail past 2x, and 3x costs 2.25x the pixels
+    if (bgCanvas) { bgCanvas.width = Math.round(w * bdpr); bgCanvas.height = Math.round(h * bdpr); }
+    view.w = w; view.h = h; view.dpr = dpr; view.bgDpr = bdpr;
     game.resize?.(view, shell);
   }
   new ResizeObserver(resize).observe(canvas);
@@ -67,7 +84,8 @@ export function createShell({ canvas, game }) {
     el.best.textContent = String(shell.best);
     el.bestTitle.textContent = String(shell.best);
   };
-  showBest();
+  const loadBest = () => { shell.best = cleanScore(store.get(bestKey(), 0)); showBest(); };
+  loadBest();
 
   let toastTimer = 0;
   shell.toast = (msg) => {
@@ -88,7 +106,7 @@ export function createShell({ canvas, game }) {
   syncMute();
 
   async function share() {
-    const url = location.origin + location.pathname;
+    const url = location.origin + location.pathname + (shell.mode ? `?stage=${shell.mode}` : '');
     let ok = false;
     try { await navigator.clipboard.writeText(url); ok = true; } catch { /* fall back below */ }
     if (!ok) {
@@ -113,6 +131,47 @@ export function createShell({ canvas, game }) {
   const syncLegend = () => { body.dataset.legend = shell.legendOn ? '1' : '0'; };
   syncLegend();
 
+  /* ---------- location picker (title screen) ---------- */
+  const cardsEl = $('cards'), pickName = $('pick-name'), pickBlurb = $('pick-blurb');
+  const cards = modes.map((m) => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'card'; b.dataset.mode = m.id; b.setAttribute('aria-pressed', 'false');
+    const th = document.createElement('span'); th.className = 'thumb';
+    const img = new Image(); img.alt = ''; img.width = 256; img.height = 144; img.decoding = 'async'; img.draggable = false;
+    img.addEventListener('error', () => { img.remove(); b.classList.add('nothumb'); });   // a thumb that fails to load: a plain styled card, never a broken-image icon
+    img.src = m.thumb;
+    th.append(img);
+    const name = document.createElement('b'); name.textContent = m.name;
+    const tag = document.createElement('small'); tag.textContent = m.tag;
+    b.append(th, name, tag);
+    cardsEl.append(b);
+    return b;
+  });
+  const syncPicker = () => {
+    for (const c of cards) c.setAttribute('aria-pressed', String(c.dataset.mode === shell.mode));
+    const m = modes.find((x) => x.id === shell.mode) || modes[0];
+    pickName.textContent = m.name; pickBlurb.textContent = m.blurb;
+  };
+  // Choosing a location live-previews it behind the title. It never starts a run; PLAY (or any key) does.
+  shell.setMode = (id, { persist = true, instant = false, prefer = false } = {}) => {
+    if (!validMode(id)) id = modes[0].id;
+    shell.mode = id;
+    if (persist) store.set(MODE_KEY, id);
+    syncPicker(); loadBest();
+    game.setMode?.(id, { instant, prefer });
+  };
+  const stepMode = (d) => {
+    const i = Math.max(0, modes.findIndex((m) => m.id === shell.mode));
+    shell.setMode(modes[(i + d + modes.length) % modes.length].id);
+    cards.find((c) => c.dataset.mode === shell.mode)?.focus({ preventScroll: true });   // focus travels with the selection
+    sfx.play('ui');
+  };
+  cards.forEach((c) => c.addEventListener('click', (e) => {
+    if (shell.state !== 'title') return;
+    shell.setMode(c.dataset.mode); sfx.play('ui');
+    if (e.detail !== 0) c.blur();        // a mouse/touch pick: the next key press starts the run. A keyboard pick keeps focus.
+  }));
+
   /* ---------- flow: title -> play -> over -> instant restart ---------- */
   let lastStart = 0, overPending = null, overReadyAt = 0;
   let howFrom = null;   // 'title' | 'paused' while the how-to screen is open
@@ -135,12 +194,30 @@ export function createShell({ canvas, game }) {
     sfx.play('start');
   };
 
+  // Back to the title and its picker from a game-over or pause screen: the run is dropped, the attract fight runs again,
+  // and the selected card has focus so the picker is reachable by keyboard.
+  shell.toTitle = () => {
+    overPending = null; howFrom = null;
+    el.over.hidden = el.paused.hidden = el.howto.hidden = true;
+    juice.reset(); particles.clear();
+    if (engine.paused) engine.resume();
+    setState('title');
+    el.title.hidden = false;
+    shell.setScore(0);
+    shell.setMode(shell.mode, { persist: false, instant: true, prefer: true });   // a fresh first location for the next run, painted at once under the panel
+    game.reset('attract');
+    el.title.scrollTop = 0;
+    (cards.find((c) => c.dataset.mode === shell.mode) || el.again).focus({ preventScroll: true });
+    sfx.play('ui');
+  };
+  document.querySelectorAll('[data-change]').forEach((b) => b.addEventListener('click', () => shell.toTitle()));
+
   shell.end = ({ score, heading = 'GAME OVER', lines = [], delay = 900 }) => {
     if (shell.state !== 'play') return;
     setState('over');
     shell.setScore(score);
     const isBest = score > shell.best;
-    if (isBest) { shell.best = score; store.set(`${game.slug}:best`, score); showBest(); }
+    if (isBest) { shell.best = score; store.set(bestKey(), score); showBest(); }
     overPending = { score, heading, lines, isBest, wait: delay };
   };
 
@@ -180,6 +257,7 @@ export function createShell({ canvas, game }) {
   const onResume = () => { el.paused.hidden = true; };
   addEventListener('focus', () => { if (engine.paused && shell.state !== 'play') engine.resume(); });
   el.paused.addEventListener('click', (e) => {
+    if (e.target.closest('[data-change]')) return;
     if (e.target.closest('#restart')) shell.start();
     else if (!e.target.closest('#pause-how')) engine.resume();
   });
@@ -216,6 +294,17 @@ export function createShell({ canvas, game }) {
   input.onTouch = () => document.documentElement.setAttribute('data-touch', '1');
   if (input.touch) input.onTouch();
 
+  // Enter/Space on a focused button or link belongs to that control (COPY LINK, HOW TO PLAY, CHANGE LOCATION, mute, ...), not to "any key starts".
+  // Space is also the jump key, so input.js has already cancelled its default: click the control ourselves, once.
+  const onControl = (c, ...roots) => {
+    if (c !== 'Enter' && c !== 'Space') return false;
+    const a = document.activeElement;
+    return !!a?.closest?.('button, a[href], input, select, textarea, [role="button"]') && roots.some((r) => r.contains(a));
+  };
+  let swallowUp = false;
+  const activate = (e) => { e.preventDefault(); if (e.repeat) return; swallowUp = true; document.activeElement.click(); };
+  addEventListener('keyup', (e) => { if (swallowUp && (e.code === 'Space' || e.code === 'Enter')) { swallowUp = false; e.preventDefault(); } }, true);
+
   input.onKey = (e) => {
     const c = e.code;
     if (c === 'KeyM' && !e.repeat) { toggleMute(); return; }
@@ -227,6 +316,7 @@ export function createShell({ canvas, game }) {
     }
     if (engine.paused) {
       if (shell.state === 'play' && !e.repeat) {
+        if (onControl(c, el.paused)) return activate(e);
         if (c === 'KeyR') { e.preventDefault(); shell.start(); }
         else if (c === 'KeyH') { e.preventDefault(); openHow('paused'); }
         else if (!NON_START.test(c)) { e.preventDefault(); engine.resume(); }
@@ -234,10 +324,15 @@ export function createShell({ canvas, game }) {
       return;
     }
     if (shell.state === 'title') {
+      const onCard = document.activeElement?.classList?.contains('card');
+      if (!onCard && onControl(c, el.title, el.mute.parentElement)) return activate(e);       // the focused control gets Enter/Space, not "any key starts"
+      if (c === 'ArrowLeft' || c === 'ArrowRight') { e.preventDefault(); if (!e.repeat) stepMode(c === 'ArrowLeft' ? -1 : 1); return; }
+      if (onCard && (c === 'Enter' || c === 'Space')) { e.preventDefault(); if (!e.repeat) document.activeElement.click(); return; }
       if (c === 'KeyH' && !e.repeat) { e.preventDefault(); openHow('title'); }
       else if (!NON_START.test(c) && !e.repeat) { e.preventDefault(); shell.start(); }
     } else if (shell.state === 'over') {
       const ready = performance.now() >= overReadyAt && !overPending;
+      if (onControl(c, el.over, el.mute.parentElement) && document.activeElement !== el.again) return activate(e);
       if (c === 'KeyR' || (ready && (c === 'Space' || c === 'Enter'))) { e.preventDefault(); shell.start(); }
     } else if (shell.state === 'play') {
       if (c === 'KeyR' && !e.repeat) shell.start();
@@ -250,10 +345,12 @@ export function createShell({ canvas, game }) {
     }
   };
   const tapFlow = (e) => {
-    if (e.target.closest('button, a')) return;
+    if (e.target.closest('button, a, .picker')) return;
     if (shell.state === 'over' && (performance.now() < overReadyAt || overPending)) return;
     shell.start();
   };
+  // a mouse/touch click leaves no focus behind on a button: the next key press is "any key" again, not a second press of that button
+  document.addEventListener('click', (e) => { const b = e.detail !== 0 && e.target.closest?.('button'); if (b && document.activeElement === b) b.blur(); });
   el.title.addEventListener('click', tapFlow);
   el.over.addEventListener('click', tapFlow);
   $('play').addEventListener('click', () => shell.start());
@@ -277,9 +374,9 @@ export function createShell({ canvas, game }) {
       particles.update(dt);
       input.endStep();
     },
-    render(alpha) {
+    render(alpha, dt) {
       ctx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
-      game.render(ctx, alpha, shell);
+      game.render(ctx, alpha, shell, engine.paused ? 0 : dt);
       juice.drawFlash(ctx, view.w, view.h);
       if (shell.debug) drawDebug();
     },
@@ -300,6 +397,7 @@ export function createShell({ canvas, game }) {
 
   /* ---------- boot ---------- */
   game.setup?.(shell);
+  shell.setMode(startMode(), { persist: false, instant: true });
   resize();
   setState('title');
   game.reset('attract');

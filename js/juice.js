@@ -31,7 +31,7 @@ export class Juice {
     this.ox = 0; this.oy = 0; this.angle = 0;
     this.hitstopMs = 0;
     this.slowMs = 0; this.slowDur = 1; this.slowScale = 1;
-    this.flashA = 0; this.flashColor = '#ffffff';
+    this.flashA = 0; this.flashColor = '#ffffff'; this.flashDefault = '#ffffff';   // default flash colour follows the stage (ink on paper)
     this.zoomMs = 0; this.zoomDur = 1; this.zoomAmt = 0; this.zoom = 0;
     this.fx = 0; this.fy = 0;
   }
@@ -51,7 +51,7 @@ export class Juice {
     this.slowScale = scale; this.slowMs = ms; this.slowDur = ms;
   }
 
-  flash(a, color = '#ffffff') {
+  flash(a, color = this.flashDefault) {
     this.flashA = Math.max(this.flashA, a * (this.reduced ? 0.25 : 1));
     this.flashColor = color;
   }

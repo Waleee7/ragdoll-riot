@@ -152,6 +152,19 @@ export class Sfx {
     [0, 0, -5, 0].forEach((n, i) =>
       this.tone({ f: 110 * Math.pow(2, n / 12), dur: 0.26, type: 'sawtooth', vol: 0.16, delay: i * 0.22 }));
   }
+  _flame() {
+    this.noise({ dur: 0.5, type: 'bandpass', f: 500, f2: 1800, q: 0.6, vol: 0.34, attack: 0.05 });
+    this.tone({ f: 70, f2: 40, dur: 0.4, type: 'triangle', vol: 0.3 });
+  }
+  _erase() {
+    this.noise({ dur: 0.34, type: 'bandpass', f: 2200, f2: 900, q: 1.6, vol: 0.3 });
+    this.tone({ f: 150, f2: 80, dur: 0.2, type: 'square', vol: 0.1 });
+  }
+  _warn() { [0, 0.16].forEach((d) => this.tone({ f: 740, f2: 700, dur: 0.1, type: 'square', vol: 0.09, delay: d })); }
+  _rip() {
+    this.noise({ dur: 0.5, type: 'highpass', f: 800, f2: 5200, q: 0.7, vol: 0.34, attack: 0.04 });
+    this.tone({ f: 50, f2: 24, dur: 0.6, vol: 0.55, delay: 0.25 });
+  }
   _tip() { this.tone({ f: 880, f2: 1320, dur: 0.06, vol: 0.05 }); }
   _over() {
     [0, -3, -7, -12].forEach((n, i) =>

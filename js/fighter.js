@@ -5,6 +5,7 @@
 // Launching = leaving the pose and handing the points their current velocity.
 import { Rig, DT, G, B, N, HEAD, NECK, PELV, ELB_B, HAND_B, ELB_F, HAND_F, KNEE_B, FOOT_B, KNEE_F, FOOT_F } from './rig.js';
 import { ease, lerp, clamp } from './juice.js';
+import { PAL } from './scenery.js';
 
 /* Attack specs. a..b is the active (damaging) window as a fraction of dur.
    vx/vy are launch velocities in units/s before dividing by the victim's mass. */
@@ -66,7 +67,7 @@ export class Fighter {
     this.bowl = false; this.bowled = new Set(); this.credit = false;
     this.guard = kind === 'shield';   // shield up: blocks punches from the front
     this.armor = kind === 'boss';     // flinches but never staggers or launches until KO
-    this.zapCd = 0; this.stompFired = false;
+    this.zapCd = 0; this.stompFired = false; this.drawT = 0;   // drawT: pencil-on entrance (The Margins)
     this.lo = -1e5; this.hi = 1e5; this.entering = false;
     this.evLand = 0; this.evGetup = false;
     this.tx = new Float32Array(N); this.ty = new Float32Array(N);
@@ -363,21 +364,21 @@ function roundRect(ctx, x, y, w, h, r) {
   ctx.lineTo(x, y + r); ctx.quadraticCurveTo(x, y, x + r, y); ctx.closePath();
 }
 
-export function drawShadow(ctx, f, alpha) {
+export function drawShadow(ctx, f, alpha, pal) {
   const r = f.rig;
   const px = r.px[PELV] + (r.x[PELV] - r.px[PELV]) * alpha;
   const lowest = Math.max(r.y[FOOT_B], r.y[FOOT_F], r.y[PELV]);
   const h = clamp((f.groundY - lowest) / 260, 0, 1);
-  const a = 0.38 * (1 - h) * f.fade;
+  const a = (pal?.shadowA ?? 0.38) * (1 - h) * f.fade;
   if (a < 0.02) return;
   const w = (f.ragdolled ? 46 : 30) * f.s * (1 - h * 0.5);
   ctx.globalAlpha = a;
-  ctx.fillStyle = '#000';
+  ctx.fillStyle = pal?.shadow ?? '#000';
   ctx.beginPath(); ctx.ellipse(px, f.groundY + 3, w, 6 * f.s, 0, 0, 6.2832); ctx.fill();
   ctx.globalAlpha = 1;
 }
 
-export function drawFighter(ctx, f, alpha, reduced, hitstopping) {
+export function drawFighter(ctx, f, alpha, reduced, hitstopping, pal = PAL.ring) {
   const r = f.rig, k = f.k, s = f.s;
   let jx = 0, jy = 0;
   if (hitstopping && f.shakeT > 0) { jx = (Math.random() - 0.5) * 5; jy = (Math.random() - 0.5) * 3; }
@@ -385,19 +386,23 @@ export function drawFighter(ctx, f, alpha, reduced, hitstopping) {
     X[i] = r.px[i] + (r.x[i] - r.px[i]) * alpha + jx;
     Y[i] = r.py[i] + (r.y[i] - r.py[i]) * alpha + jy;
   }
-  const flash = f.flash > 0;
-  const main = flash ? '#ffffff' : k.color;
-  const back = flash ? '#dfe2ee' : k.back;
+  const flash = f.flash > 0, player = f.team === 'p', boss = f.kind === 'boss';
+  const fc = player ? pal.flashP : pal.flashE;
+  const main = flash ? fc : player ? pal.pMain : boss ? pal.bossMain : pal.eMain || k.color;
+  const back = flash ? fc : player ? pal.pBack : boss ? pal.bossBack : pal.eBack || k.back;
   const lw = k.lw * s;
 
   let a = f.fade;
   if (f.invuln > 0 && !f.ragdolled && f.state !== 'getup') a *= reduced ? 0.7 : (Math.floor(f.time / 0.07) % 2 ? 0.45 : 0.95);
   ctx.globalAlpha = a;
   ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.lineWidth = lw;
+  // drawn on: the body is revealed from the feet up behind a pencil scribble
+  const drawing = f.drawT > 0, dq = drawing ? clamp(1 - f.drawT / 0.5, 0, 1) : 1;
+  if (drawing) { ctx.save(); ctx.beginPath(); ctx.rect(f.x - 130 * s, f.groundY - 6 - dq * 240 * s, 260 * s, 320 * s); ctx.clip(); }
 
   // scarf sits behind the body
   if (f.scarf) {
-    ctx.strokeStyle = '#ff3e3e';
+    ctx.strokeStyle = pal.scarf;
     const sc = f.scarf;
     for (let i = 1; i < sc.length; i++) {
       ctx.lineWidth = Math.max(1.6, 5.4 - i * 0.8);
@@ -418,7 +423,7 @@ export function drawFighter(ctx, f, alpha, reduced, hitstopping) {
   ctx.beginPath(); ctx.moveTo(X[NECK], Y[NECK]); ctx.lineTo(X[PELV], Y[PELV]); ctx.stroke();
   if (f.kind === 'brute' || f.kind === 'boss') {
     // shoulder plate
-    ctx.lineWidth = lw * 1.7; ctx.strokeStyle = flash ? '#fff' : '#c8283a';
+    ctx.lineWidth = lw * 1.7; ctx.strokeStyle = flash ? fc : boss ? pal.plate : '#c8283a';
     const nx = X[NECK], ny = Y[NECK], tx = X[HEAD] - nx, ty = Y[HEAD] - ny, tl = Math.hypot(tx, ty) || 1;
     const px = -ty / tl * 6.4 * s, py = tx / tl * 6.4 * s;
     ctx.beginPath(); ctx.moveTo(nx - px, ny - py); ctx.lineTo(nx + px, ny + py); ctx.stroke();
@@ -438,18 +443,18 @@ export function drawFighter(ctx, f, alpha, reduced, hitstopping) {
     // headband tails stream out behind, longer at a sprint
     const d = f.face, hx = X[HEAD] - d * hr * 0.8, hy = Y[HEAD] - hr * 0.35;
     const wag = Math.sin(f.time * 18) * 3 * s, stretch = 1 + Math.min(1, Math.abs(f.vx) / 180) * 0.8;
-    ctx.strokeStyle = flash ? '#fff' : '#ffd0d0'; ctx.lineWidth = 2.2 * s;
+    ctx.strokeStyle = flash ? fc : pal.tail; ctx.lineWidth = 2.2 * s;
     ctx.beginPath(); ctx.moveTo(hx, hy); ctx.lineTo(hx - d * 14 * s * stretch, hy + 3 * s + wag); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(hx, hy + 2 * s); ctx.lineTo(hx - d * 11 * s * stretch, hy + 9 * s - wag); ctx.stroke();
     ctx.lineWidth = lw;
   }
   ctx.beginPath(); ctx.arc(X[HEAD], Y[HEAD], hr, 0, 6.2832); ctx.fill();
   if (f.kind === 'runner' && !flash) {
-    ctx.strokeStyle = '#ffd0d0'; ctx.lineWidth = 2.4 * s;
+    ctx.strokeStyle = pal.tail; ctx.lineWidth = 2.4 * s;
     ctx.beginPath(); ctx.moveTo(X[HEAD] - hr * 0.96, Y[HEAD] - hr * 0.35); ctx.lineTo(X[HEAD] + hr * 0.96, Y[HEAD] - hr * 0.35); ctx.stroke();
   }
   if (f.kind === 'brute' || f.kind === 'boss') {
-    ctx.strokeStyle = flash ? '#fff' : '#ffd0d0'; ctx.lineWidth = 2.4 * s;
+    ctx.strokeStyle = flash ? fc : pal.tail; ctx.lineWidth = 2.4 * s;
     for (const sgn of [-1, 1]) {
       ctx.beginPath();
       ctx.moveTo(X[HEAD] + sgn * hr * 0.7, Y[HEAD] - hr * 0.55);
@@ -457,9 +462,18 @@ export function drawFighter(ctx, f, alpha, reduced, hitstopping) {
       ctx.stroke();
     }
   }
+  if (boss && pal.deco === 'helm') {
+    ctx.fillStyle = flash ? fc : '#2a1c14'; ctx.beginPath(); ctx.arc(X[HEAD], Y[HEAD], hr * 1.14, Math.PI, 0); ctx.fill();
+    ctx.strokeStyle = flash ? fc : '#c9a24a'; ctx.lineWidth = 2.2 * s; ctx.beginPath(); ctx.moveTo(X[HEAD] - hr * 1.1, Y[HEAD] - hr * 0.02); ctx.lineTo(X[HEAD] + hr * 1.1, Y[HEAD] - hr * 0.02); ctx.stroke();
+  } else if (boss && pal.deco === 'scribble') {
+    ctx.strokeStyle = flash ? fc : '#17181f'; ctx.lineWidth = 2 * s; ctx.beginPath();
+    const w0 = Math.floor(f.time * 8);
+    for (let i = 0; i < 7; i++) { const sx = X[HEAD] - hr * 1.2 + i * hr * 0.4, sy = Y[HEAD] - hr * 1.2 - (i % 2 ? 6 : 14) * s + ((w0 + i * 3) % 3 - 1) * 1.2; if (i) ctx.lineTo(sx, sy); else ctx.moveTo(sx, sy); }
+    ctx.stroke();
+  }
   // eye slit shows facing
   if (!flash) {
-    ctx.strokeStyle = '#090a0f'; ctx.lineWidth = 2.6 * Math.min(1.3, s);
+    ctx.strokeStyle = pal.eye; ctx.lineWidth = 2.6 * Math.min(1.3, s);
     const dir = f.face;
     const dead = f.state === 'dead';
     if (f.kind === 'boss' && !dead) {
@@ -483,8 +497,8 @@ export function drawFighter(ctx, f, alpha, reduced, hitstopping) {
   if (f.guard && !f.ragdolled) {
     const d = f.face, w = 12 * s, h = 54 * s;
     const cx = X[HAND_F] + d * 4 * s, cy = Y[HAND_F] + 6 * s;
-    ctx.fillStyle = flash ? '#ffffff' : 'rgba(16,18,26,.94)';
-    ctx.strokeStyle = flash ? '#ffffff' : '#eceef4'; ctx.lineWidth = 2.6 * s;
+    ctx.fillStyle = flash ? fc : pal.shieldFill;
+    ctx.strokeStyle = flash ? fc : pal.shieldStroke; ctx.lineWidth = 2.6 * s;
     roundRect(ctx, cx - w / 2, cy - h / 2, w, h, 4 * s);
     ctx.fill(); ctx.stroke();
     ctx.strokeStyle = '#ff3e3e'; ctx.lineWidth = 2 * s;
@@ -495,11 +509,19 @@ export function drawFighter(ctx, f, alpha, reduced, hitstopping) {
   if (f.tele && f.team === 'e') {
     const blink = Math.floor(f.t / 0.06) % 2 === 0;
     ctx.globalAlpha = 1;
-    ctx.fillStyle = blink ? '#ffffff' : '#ff3e3e';
-    ctx.strokeStyle = '#090a0f'; ctx.lineWidth = 4;
+    ctx.fillStyle = blink ? pal.bang : pal.scarf;
+    ctx.strokeStyle = pal.bangStroke; ctx.lineWidth = 4;
     ctx.font = `${Math.round(26 * Math.min(1.4, s))}px "Futura Condensed ExtraBold","Impact","Arial Narrow Bold",sans-serif`;
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.strokeText('!', X[HEAD], Y[HEAD] - hr - 16 * s); ctx.fillText('!', X[HEAD], Y[HEAD] - hr - 16 * s);
   }
   ctx.globalAlpha = 1;
+  if (drawing) {
+    ctx.restore();
+    // the pencil: quick graphite strokes along the reveal edge
+    const ty = f.groundY - 6 - dq * 240 * s;
+    ctx.strokeStyle = 'rgba(40,40,50,.75)'; ctx.lineWidth = 1.7; ctx.beginPath();
+    for (let i = 0; i < 6; i++) { const x0 = f.x - 34 * s + Math.random() * 68 * s, y0 = ty + (Math.random() - 0.5) * 16 * s; ctx.moveTo(x0, y0); ctx.lineTo(x0 + (Math.random() - 0.3) * 22 * s, y0 + (Math.random() - 0.5) * 10 * s); }
+    ctx.stroke();
+  }
 }

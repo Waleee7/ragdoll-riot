@@ -10,10 +10,13 @@ export class Particles {
     this.max = max;
     this.list = Array.from({ length: max }, () => ({
       on: false, kind: 'dot', x: 0, y: 0, px: 0, py: 0, vx: 0, vy: 0,
-      life: 0, max: 1, size: 1, grow: 0, grav: 0, drag: 1, color: '#fff', text: '', alpha: 1,
+      life: 0, max: 1, size: 1, grow: 0, grav: 0, drag: 1, color: '#fff', text: '', alpha: 1, fo: 0,
     }));
+    this.avoid = [];                      // screen-px rects (CSS px) that big popups keep clear of: HUD plates, touch buttons
     this.cursor = 0;
     this.count = 0;
+    this.dustColor = '#8a8fa3';
+    this.stroke = 'rgba(9,10,15,.85)';   // popup outline: ink on dark art, paper on The Margins
   }
 
   spawn(kind, x, y, vx, vy, life, size, color, o) {
@@ -26,7 +29,7 @@ export class Particles {
     if (!p) { p = this.list[this.cursor]; this.cursor = (this.cursor + 1) % this.max; }
     p.on = true; p.kind = kind; p.x = p.px = x; p.y = p.py = y; p.vx = vx; p.vy = vy;
     p.life = p.max = life; p.size = size; p.color = color;
-    p.grow = o?.grow ?? 0; p.grav = o?.grav ?? 0; p.drag = o?.drag ?? 1; p.text = o?.text ?? ''; p.alpha = o?.alpha ?? 1;
+    p.grow = o?.grow ?? 0; p.grav = o?.grav ?? 0; p.drag = o?.drag ?? 1; p.text = o?.text ?? ''; p.alpha = o?.alpha ?? 1; p.fo = 0;
     return p;
   }
 
@@ -40,7 +43,7 @@ export class Particles {
   }
 
   // Soft ground dust that billows out and fades.
-  dust(x, y, count, spread = 30, color = '#8a8fa3') {
+  dust(x, y, count, spread = 30, color = this.dustColor) {
     for (let i = 0; i < count; i++) {
       const dir = i % 2 ? 1 : -1;
       this.spawn('dust', x + rand(-spread, spread) * 0.4, y, dir * rand(20, spread * 3), rand(-60, -10),
@@ -60,8 +63,25 @@ export class Particles {
     this.spawn('ring', x, y, 0, 0, life, size * 0.2, color, { grow: size * 3.2, alpha: 0.9 });
   }
 
+  // Popups that would land on top of a live one are stacked above it instead (hit chains spawn several in the same spot).
   text(x, y, str, color = '#fff', size = 22, life = 0.9) {
-    this.spawn('text', x + rand(-14, 14), y + rand(-8, 8), 0, -70, life, size, color, { text: str, drag: 0.96 });
+    x += rand(-14, 14); y += rand(-8, 8);
+    const w = str.length * size * 0.5, h = size * 1.05;
+    for (let pass = 0; pass < 6; pass++) {
+      let hit = null;
+      for (const p of this.list) {
+        if (!p.on || p.kind !== 'text') continue;
+        if (Math.abs(p.x - x) < (w + p.text.length * p.size * 0.5) / 2 && Math.abs(p.y - y) < (h + p.size * 1.05) / 2 && (!hit || p.y < hit.y)) hit = p;
+      }
+      if (!hit) break;
+      y = hit.y - (h + hit.size * 1.05) / 2 - 2;
+    }
+    this.spawn('text', x, Math.max(24, y), 0, -70, life, size, color, { text: str, drag: 0.96 });
+  }
+
+  // Big words and popups of the place we are leaving fade out fast (0.25 s) so they never sit under, or read wrong beside, what comes next.
+  fadeText(secs = 0.25) {
+    for (const p of this.list) if (p.on && p.kind === 'text' && !(p.fo > 0)) p.fo = secs;
   }
 
   clear() { for (const p of this.list) p.on = false; this.count = 0; }
@@ -71,6 +91,7 @@ export class Particles {
     for (const p of this.list) {
       if (!p.on) continue;
       p.life -= dt;
+      if (p.fo > 0) { p.fo -= dt; if (p.fo <= 0) { p.on = false; continue; } }
       if (p.life <= 0) { p.on = false; continue; }
       n++;
       p.px = p.x; p.py = p.y;
@@ -111,15 +132,31 @@ export class Particles {
         case 'text': {
           const k = 1 - t;
           const pop = k < 0.15 ? 0.6 + (k / 0.15) * 0.55 : 1.15 - Math.min(0.15, (k - 0.15) * 0.3);
-          ctx.globalAlpha = Math.min(1, t * 2.2);
+          ctx.globalAlpha = Math.min(1, t * 2.2) * (p.fo > 0 ? Math.min(1, p.fo * 4) : 1);
           ctx.fillStyle = p.color; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
           ctx.font = `${Math.round(p.size * pop)}px ${FONT}`;
-          ctx.strokeStyle = 'rgba(9,10,15,.85)'; ctx.lineWidth = 4; ctx.lineJoin = 'round';
-          // Keep the whole label on screen: a hit at the arena edge shouldn't print half a word.
+          ctx.strokeStyle = this.stroke; ctx.lineWidth = 4; ctx.lineJoin = 'round';
+          // Keep the whole label on screen: a hit at the arena edge shouldn't print half a word. Big words also keep clear of the HUD.
           const m = ctx.getTransform(), half = ctx.measureText(p.text).width / 2 + 6;
-          const left = -m.e / m.a, right = (ctx.canvas.width - m.e) / m.a;
-          const tx = Math.min(Math.max(x, left + half), right - half);
-          ctx.strokeText(p.text, tx, y); ctx.fillText(p.text, tx, y);
+          const big = p.size >= 28, dk = ctx.canvas.width / (window.innerWidth || ctx.canvas.width);
+          const mg = big ? Math.max(18, Math.round((window.innerWidth || 0) * 0.04)) : 0;   // big words keep ~4% of the width off the edges
+          const left = (mg * dk - m.e) / m.a, right = (ctx.canvas.width - mg * dk - m.e) / m.a;
+          let tx = Math.min(Math.max(x, left + half), Math.max(left + half, right - half)), ty = y;
+          if (big) {
+            const hh = p.size * pop * 0.55 + 2;
+            for (let pass = 0; pass < 3; pass++) {
+              let hit = null;
+              for (const r of this.avoid) {
+                const rl = (r.x * dk - m.e) / m.a - 8, rr = (r.r * dk - m.e) / m.a + 8, rt = (r.y * dk - m.f) / m.d - 4, rb = (r.b * dk - m.f) / m.d + 4;
+                if (tx + half > rl && tx - half < rr && ty + hh > rt && ty - hh < rb) { hit = { rl, rr, rt, rb }; break; }
+              }
+              if (!hit) break;
+              const toRight = hit.rr + half, toLeft = hit.rl - half;
+              const okR = toRight <= right - half, okL = toLeft >= left + half;
+              if (okR && (!okL || toRight - tx <= tx - toLeft)) tx = toRight; else if (okL) tx = toLeft; else ty = hit.rb + hh;
+            }
+          }
+          ctx.strokeText(p.text, tx, ty); ctx.fillText(p.text, tx, ty);
           break;
         }
         default: {
